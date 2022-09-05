@@ -1,0 +1,55 @@
+name: Node.js CI
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+    branches: [main]
+
+jobs:
+  build:
+    runs-on: ubuntu-latest
+    if: "!contains(github.event.head_commit.message, 'ci: version bump to')"
+    strategy:
+      matrix:
+        node-version: [16.x]
+    steps:
+      - uses: actions/checkout@v2
+      - name: Use Node.js ${{ matrix.node-version }}
+        uses: actions/setup-node@v2
+        with:
+          node-version: ${{ matrix.node-version }}
+          registry-url: 'https://registry.npmjs.org'
+          cache: 'yarn'
+      - name: Install dependencies
+        run: |
+          yarn --frozen-lockfile
+      - name: Build packages
+        run: |
+          yarn build
+      - name: Upload npm package
+        uses: actions/upload-artifact@v3
+        with:
+          name: npm-package
+          path: |
+            ./dist
+  deploy:
+    runs-on: ubuntu-latest
+    environment: 'production'
+    needs: [build]
+    steps:
+      - uses: actions/checkout@v1
+      - name: 'Automated Version Bump'
+        uses: 'phips28/gh-action-bump-version@master'
+        env:
+          GITHUB_TOKEN: ${{ secrets.GIT_TOKEN }}
+      - name: Download npm-package for publishing
+        uses: actions/download-artifact@v3
+        with:
+          name: npm-package
+          path: ./dist
+      - name: 'Package Publish'
+        uses: JS-DevTools/npm-publish@v1
+        with:
+          token: ${{ secrets.NPM_TOKEN }}
+          access: 'public'
